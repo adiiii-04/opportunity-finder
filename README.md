@@ -1,4 +1,4 @@
-# 📡 Opportunity Radar
+# 📡 Opportunity Finder
 
 > Live opportunities from **20 trusted Indian and global portals**, intelligently matched to your student profile using live web data.
 
