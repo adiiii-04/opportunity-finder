@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { TRUSTED_SOURCES, OpportunityCategory, TrustedSource } from "@/config/sources";
+import { TRUSTED_SOURCES, OpportunityCategory } from "@/config/sources";
 import {
   understandStudentIntent,
   triageSearchResults,
@@ -67,11 +67,29 @@ export async function POST(req: NextRequest) {
       const body = (await req.json()) as RadarRequest;
       const { lookingFor, profile, categories: userCategories } = body;
 
+      // Extract keys from client (header or body) or fallback to server env
+      const headerGeminiKey = req.headers.get("x-gemini-api-key")?.trim();
+      const headerTinyfishKey = req.headers.get("x-tinyfish-api-key")?.trim();
+      const geminiApiKey = (body.geminiApiKey?.trim() || headerGeminiKey || process.env.GEMINI_API_KEY)?.trim();
+      const tinyfishApiKey = (body.tinyfishApiKey?.trim() || headerTinyfishKey || process.env.TINYFISH_API_KEY)?.trim();
+
       if (!lookingFor?.trim() && !profile?.trim()) {
         await sendEvent({
           step: "error",
           message: "Please enter what you are looking for or your student profile.",
           error: "Missing required inputs",
+        });
+        await writer.close();
+        return;
+      }
+
+      if (!geminiApiKey) {
+        await sendEvent({
+          step: "error",
+          message:
+            "GEMINI_API_KEY is missing. Please add it to your Vercel Project Settings > Environment Variables, or click 'API Keys' in the top right to enter it directly.",
+          error:
+            "GEMINI_API_KEY is missing. Please add it in Vercel Environment Variables or via the 'API Keys' button in the app header.",
         });
         await writer.close();
         return;
@@ -95,13 +113,13 @@ export async function POST(req: NextRequest) {
 
       let understanding: UnderstandResult;
       try {
-        understanding = await understandStudentIntent(lookingFor || "", profile || "", today);
+        understanding = await understandStudentIntent(lookingFor || "", profile || "", today, geminiApiKey);
       } catch (err: unknown) {
         console.error("[Radar Pipeline] Gemini understanding failed:", err);
         const errMsg = (err as Error)?.message || "Failed to analyze student profile with Gemini";
         const friendly = errMsg.includes("GEMINI_API_KEY")
-          ? "GEMINI_API_KEY is missing or invalid in .env.local"
-          : "Could not analyze profile with Gemini. Please check your Gemini API key.";
+          ? "GEMINI_API_KEY is missing or invalid. Please configure it in your Vercel Project Settings > Environment Variables, or click 'API Keys' in the top right to enter it directly."
+          : `Could not analyze profile with Gemini: ${errMsg}`;
         await sendEvent({
           step: "error",
           message: friendly,
@@ -154,6 +172,7 @@ export async function POST(req: NextRequest) {
           language: "en",
           after_date: sixtyDaysAgo,
           include_domains: targetDomains,
+          customApiKey: tinyfishApiKey,
         }).catch((err) => {
           console.warn(`[Radar Pipeline] Search failed for query "${q}":`, err.message);
           return [] as TinyFishSearchResult[];
@@ -169,6 +188,7 @@ export async function POST(req: NextRequest) {
         after_date: sixtyDaysAgo,
         exclude_domains:
           "instagram.com,facebook.com,x.com,twitter.com,linkedin.com,youtube.com,reddit.com,pinterest.com,quora.com,medium.com",
+        customApiKey: tinyfishApiKey,
       }).catch((err) => {
         console.warn(`[Radar Pipeline] Open web search failed for "${bestQuery}":`, err.message);
         return [] as TinyFishSearchResult[];
@@ -230,7 +250,7 @@ export async function POST(req: NextRequest) {
       let triagedUrls: string[] = [];
       if (filteredSearchResults.length > 0) {
         try {
-          const triaged = await triageSearchResults(filteredSearchResults, understanding.keywords);
+          const triaged = await triageSearchResults(filteredSearchResults, understanding.keywords, geminiApiKey);
           triagedUrls = triaged.map((t) => t.url);
         } catch (err) {
           console.error("[Radar Pipeline] Triage failed, falling back to top search results:", err);
@@ -262,7 +282,7 @@ export async function POST(req: NextRequest) {
 
       for (let i = 0; i < urlsToFetch.length; i += batchSize) {
         const chunk = urlsToFetch.slice(i, i + batchSize);
-        const { results, errors } = await fetchTinyFishBatch(chunk);
+        const { results, errors } = await fetchTinyFishBatch(chunk, tinyfishApiKey);
         for (const item of results) {
           if (item?.url) {
             fetchedPagesMap.set(normalizeUrl(item.url), item);
@@ -348,6 +368,7 @@ export async function POST(req: NextRequest) {
             today,
             keywords: understanding.keywords,
             profile: `${lookingFor}\n${profile}`,
+            customApiKey: geminiApiKey,
           });
         } catch (err) {
           console.error(`[Radar Pipeline] Extraction failed for ${page.url}:`, err);

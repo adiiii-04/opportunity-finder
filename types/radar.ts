@@ -58,6 +58,8 @@ export interface RadarRequest {
   lookingFor: string;
   profile: string;
   categories?: OpportunityCategory[];
+  geminiApiKey?: string;
+  tinyfishApiKey?: string;
 }
 
 export type PipelineStep =

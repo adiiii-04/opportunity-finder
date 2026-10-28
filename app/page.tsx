@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useTransition } from "react";
-import { OpportunityCategory, TRUSTED_SOURCES } from "@/config/sources";
+import React, { useState, useEffect, useTransition } from "react";
+import { OpportunityCategory } from "@/config/sources";
 import {
   OpportunityItem,
   PipelineStep,
@@ -13,17 +13,17 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { OpportunityCard } from "@/components/OpportunityCard";
 import { ProgressTracker } from "@/components/ProgressTracker";
 import { SourcesPanel } from "@/components/SourcesPanel";
+import { ApiKeyModal } from "@/components/ApiKeyModal";
 import {
   Radio,
   Search,
   Sparkles,
   AlertCircle,
   Filter,
-  ArrowUpDown,
   Flame,
-  CheckCircle2,
   RefreshCw,
   SlidersHorizontal,
+  Key,
 } from "lucide-react";
 
 const CATEGORIES: Array<"All" | OpportunityCategory> = [
@@ -64,6 +64,26 @@ export default function HomePage() {
   const [lookingFor, setLookingFor] = useState("");
   const [profile, setProfile] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<"All" | OpportunityCategory>("All");
+
+  // API Key modal & state
+  const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
+  const [hasCustomKeys, setHasCustomKeys] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const gKey = localStorage.getItem("radar_gemini_key");
+      const tKey = localStorage.getItem("radar_tinyfish_key");
+      setHasCustomKeys(Boolean(gKey || tKey));
+    }
+  }, []);
+
+  const refreshKeyStatus = () => {
+    if (typeof window !== "undefined") {
+      const gKey = localStorage.getItem("radar_gemini_key");
+      const tKey = localStorage.getItem("radar_tinyfish_key");
+      setHasCustomKeys(Boolean(gKey || tKey));
+    }
+  };
 
   // Pipeline runtime state
   const [isLoading, setIsLoading] = useState(false);
@@ -106,25 +126,35 @@ export default function HomePage() {
     setUnderstanding(undefined);
     setActivePages([]);
 
+    const clientGeminiKey = typeof window !== "undefined" ? localStorage.getItem("radar_gemini_key") || "" : "";
+    const clientTinyfishKey = typeof window !== "undefined" ? localStorage.getItem("radar_tinyfish_key") || "" : "";
+
     const payload = {
       lookingFor,
       profile,
       categories: selectedCategory === "All" ? undefined : [selectedCategory],
+      geminiApiKey: clientGeminiKey,
+      tinyfishApiKey: clientTinyfishKey,
     };
 
     try {
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        Accept: "text/event-stream",
+      };
+
+      if (clientGeminiKey) headers["x-gemini-api-key"] = clientGeminiKey;
+      if (clientTinyfishKey) headers["x-tinyfish-api-key"] = clientTinyfishKey;
+
       const response = await fetch("/api/radar", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "text/event-stream",
-        },
+        headers,
         body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
         if (response.status === 401) {
-          throw new Error("Your API key looks wrong. Please check TINYFISH_API_KEY and GEMINI_API_KEY.");
+          throw new Error("Your API key looks wrong. Please check your TINYFISH_API_KEY and GEMINI_API_KEY.");
         } else if (response.status === 429) {
           throw new Error("Too many requests, wait a minute.");
         } else if (response.status === 402) {
@@ -252,11 +282,30 @@ export default function HomePage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
+            {/* API Keys Configuration Button */}
+            <button
+              onClick={() => setIsKeyModalOpen(true)}
+              className="relative inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-xs hover:border-indigo-400 dark:hover:border-indigo-500 transition-all text-xs font-semibold text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400"
+            >
+              <Key className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+              <span className="hidden sm:inline">API Keys</span>
+              {hasCustomKeys && (
+                <span className="w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-emerald-200 dark:ring-emerald-950" />
+              )}
+            </button>
+
             <ThemeToggle />
           </div>
         </div>
       </header>
+
+      {/* API Key Modal */}
+      <ApiKeyModal
+        isOpen={isKeyModalOpen}
+        onClose={() => setIsKeyModalOpen(false)}
+        onKeysSaved={refreshKeyStatus}
+      />
 
       {/* Main Container */}
       <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-10 pb-16 w-full flex-1">
@@ -380,12 +429,25 @@ export default function HomePage() {
 
         {/* Error Notification */}
         {errorMessage && (
-          <div className="mb-8 p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
-            <div>
-              <h4 className="text-sm font-bold text-rose-900 dark:text-rose-200">Notice</h4>
-              <p className="text-xs text-rose-700 dark:text-rose-300 mt-0.5">{errorMessage}</p>
+          <div className="mb-8 p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+              <div>
+                <h4 className="text-sm font-bold text-rose-900 dark:text-rose-200">Notice</h4>
+                <p className="text-xs text-rose-700 dark:text-rose-300 mt-0.5">{errorMessage}</p>
+              </div>
             </div>
+
+            {/* If error relates to API keys, provide direct button to modal */}
+            {(errorMessage.toLowerCase().includes("api key") || errorMessage.includes("GEMINI_API_KEY") || errorMessage.includes("TINYFISH_API_KEY")) && (
+              <button
+                onClick={() => setIsKeyModalOpen(true)}
+                className="shrink-0 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-xs transition-all"
+              >
+                <Key className="w-3.5 h-3.5" />
+                Configure API Keys
+              </button>
+            )}
           </div>
         )}
 
@@ -526,9 +588,14 @@ export default function HomePage() {
             <span className="font-semibold text-slate-700 dark:text-slate-300">Opportunity Radar</span> — Powered by TinyFish Search & Fetch + Google Gemini Flash
           </div>
           <div className="flex items-center gap-4">
+            <button
+              onClick={() => setIsKeyModalOpen(true)}
+              className="hover:text-indigo-600 dark:hover:text-indigo-400 font-medium transition-colors"
+            >
+              Configure API Keys
+            </button>
             <span>20 Trusted Portals</span>
             <span>Zero Hallucinated Deadlines</span>
-            <span>Server-side Data Pipeline</span>
           </div>
         </div>
       </footer>

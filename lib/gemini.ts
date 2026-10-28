@@ -7,10 +7,12 @@ import {
 } from "@/types/radar";
 import { TinyFishSearchResult } from "./tinyfish";
 
-function getGeminiClient(): { ai: GoogleGenAI; model: string } {
-  const apiKey = process.env.GEMINI_API_KEY?.trim();
+function getGeminiClient(customApiKey?: string): { ai: GoogleGenAI; model: string } {
+  const apiKey = (customApiKey || process.env.GEMINI_API_KEY)?.trim();
   if (!apiKey) {
-    throw new Error("GEMINI_API_KEY environment variable is not configured. Please add it to .env.local");
+    throw new Error(
+      "GEMINI_API_KEY is missing. Please add it to your Vercel Project Settings > Environment Variables, or enter it in the API Keys dialog in the app header."
+    );
   }
   const model = process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
   const ai = new GoogleGenAI({ apiKey });
@@ -38,9 +40,10 @@ function cleanJsonText(raw: string | undefined): string {
 export async function understandStudentIntent(
   lookingFor: string,
   profile: string,
-  today: string
+  today: string,
+  customApiKey?: string
 ): Promise<UnderstandResult> {
-  const { ai, model } = getGeminiClient();
+  const { ai, model } = getGeminiClient(customApiKey);
 
   const prompt = `You are the intelligence engine of Opportunity Radar, helping Indian college students find live internships, hackathons, competitions, scholarships, fellowships, and open-source opportunities.
 Today's date is: ${today}.
@@ -91,11 +94,12 @@ Important:
  */
 export async function triageSearchResults(
   results: TinyFishSearchResult[],
-  keywords: string[]
+  keywords: string[],
+  customApiKey?: string
 ): Promise<TriagedResult[]> {
   if (results.length === 0) return [];
 
-  const { ai, model } = getGeminiClient();
+  const { ai, model } = getGeminiClient(customApiKey);
 
   const simplifiedResults = results.map((r, i) => ({
     index: i,
@@ -155,8 +159,9 @@ export async function extractOpportunitiesFromPage(params: {
   today: string;
   keywords: string[];
   profile: string;
+  customApiKey?: string;
 }): Promise<OpportunityItem[]> {
-  const { ai, model } = getGeminiClient();
+  const { ai, model } = getGeminiClient(params.customApiKey);
   const truncatedText = params.pageText.slice(0, 20000);
 
   const prompt = `You are an expert opportunity analyzer for Opportunity Radar.

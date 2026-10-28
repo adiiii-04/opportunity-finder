@@ -30,7 +30,7 @@ export class TinyFishError extends Error {
   constructor(status: number | undefined, rawMessage: string) {
     let friendly = "Couldn't reach TinyFish";
     if (status === 401) {
-      friendly = "Your API key looks wrong";
+      friendly = "Your TinyFish API key looks wrong or is missing. Please add it in Vercel Environment Variables or the API Keys dialog in the header.";
     } else if (status === 429) {
       friendly = "Too many requests, wait a minute";
     } else if (status === 402) {
@@ -45,10 +45,13 @@ export class TinyFishError extends Error {
   }
 }
 
-function getApiKey(): string {
-  const key = process.env.TINYFISH_API_KEY?.trim();
+function getApiKey(customApiKey?: string): string {
+  const key = (customApiKey || process.env.TINYFISH_API_KEY)?.trim();
   if (!key) {
-    throw new TinyFishError(401, "TINYFISH_API_KEY environment variable is not configured");
+    throw new TinyFishError(
+      401,
+      "TINYFISH_API_KEY is not configured. Please add it to your Vercel Project Settings > Environment Variables, or enter it in the API Keys dialog in the app header."
+    );
   }
   return key;
 }
@@ -102,8 +105,9 @@ export async function searchTinyFish(params: {
   after_date?: string;
   include_domains?: string;
   exclude_domains?: string;
+  customApiKey?: string;
 }): Promise<TinyFishSearchResult[]> {
-  const apiKey = getApiKey();
+  const apiKey = getApiKey(params.customApiKey);
   const url = new URL("https://api.search.tinyfish.ai");
   url.searchParams.set("query", params.query);
   url.searchParams.set("location", params.location || "IN");
@@ -150,13 +154,16 @@ export async function searchTinyFish(params: {
  * POST https://api.fetch.tinyfish.ai
  * Accepts up to 10 URLs per call. Caches each result for 30 minutes in memory.
  */
-export async function fetchTinyFishBatch(urls: string[]): Promise<{
+export async function fetchTinyFishBatch(
+  urls: string[],
+  customApiKey?: string
+): Promise<{
   results: TinyFishFetchResult[];
   errors: TinyFishFetchError[];
 }> {
   if (urls.length === 0) return { results: [], errors: [] };
 
-  const apiKey = getApiKey();
+  const apiKey = getApiKey(customApiKey);
   const cachedResults: TinyFishFetchResult[] = [];
   const uncachedUrls: string[] = [];
 

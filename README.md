@@ -12,12 +12,28 @@
 - **20 Verified Portals Monitored**: Covers Internships (Internshala, AICTE, PM Internship Scheme), Hackathons (Devfolio, MLH, Hack2skill, DoraHacks, etc.), Competitions (Unstop, Kaggle, MyGov), Scholarships (Buddy4Study, NSP, DAAD), Fellowships (IASc Summer Research, Teach For India), and Open Source (GSoC, GSSoC, Outreachy).
 - **Strict Verification (No Hallucinated Deadlines)**: Only real dates and active statuses with direct quote evidence from the page text are accepted. Expired listings are completely filtered out in code.
 - **Real-Time Streaming**: End-to-end Server-Sent Events (SSE) update the UI as each stage of the radar pipeline completes.
-- **Privacy & Security**: All API calls occur strictly in server-side API routes. API keys are never exposed to the client browser.
+- **Privacy & Security**: All API calls occur strictly in server-side API routes. In-app keys can be entered directly via the UI modal or configured server-side.
 - **Fast and Resilient**: Built with in-memory 30-minute caching, a concurrency limiter (max 4 parallel calls), and automatic 429 retry handling.
 
 ---
 
-## 🚀 Setup in 4 Steps
+## ☁️ Deploying on Vercel
+
+When deploying to Vercel, `.env.local` is intentionally kept out of GitHub to prevent secret leaks. To configure your keys on Vercel:
+
+1. Open your project in the **[Vercel Dashboard](https://vercel.com/dashboard)**.
+2. Navigate to **Settings** → **Environment Variables**.
+3. Add the following keys (select Production, Preview, and Development):
+   - `GEMINI_API_KEY`: Your Google Gemini API Key
+   - `TINYFISH_API_KEY`: Your TinyFish API Key
+   - `GEMINI_MODEL`: `gemini-2.5-flash` (optional, defaults to this)
+4. Redeploy your latest deployment under the **Deployments** tab (or push a commit).
+
+> 💡 **Instant In-Browser Alternative**: You can also click the **"API Keys"** button in the top right of the running app to store your keys locally in your browser session without touching Vercel!
+
+---
+
+## 🚀 Local Setup in 4 Steps
 
 ### Step 1: Install Dependencies
 ```bash
